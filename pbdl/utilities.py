@@ -77,23 +77,28 @@ def get_meta_data(dset):
 
     return meta
 
-
-def scan_local_dset_dir(config):
+def scan_local_dset_dir(config, load_metadata=False):
     local_dset_dir = config["local_datasets_dir"]
-    if os.path.isdir(local_dset_dir):
-        return {
-            os.path.splitext(file)[0]: _load_metadata_of_local_dset(
-                os.path.join(local_dset_dir, file), os.path.splitext(file)[0]
-            )
-            for file in os.listdir(local_dset_dir)
-            if file.endswith(config["dataset_ext"])
-        }
-    else:
-        warn(
-            f"{local_dset_dir} is not a valid directory. No local datasets will be available."
-        )
+
+    if not os.path.isdir(local_dset_dir):
+        warn(f"{local_dset_dir} is not a valid directory.")
         return {}
 
+    result = {}
+
+    for file in os.listdir(local_dset_dir):
+        if not file.endswith(config["dataset_ext"]):
+            continue
+
+        name = os.path.splitext(file)[0]
+        path = os.path.join(local_dset_dir, file)
+
+        if load_metadata:
+            result[name] = _load_metadata_of_local_dset(path, name)
+        else:
+            result[name] = None 
+
+    return result
 
 def _load_metadata_of_local_dset(file: str, dset_name):
     with h5py.File(file, "r") as f:

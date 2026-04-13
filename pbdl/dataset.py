@@ -3,7 +3,7 @@ import io
 import sys
 import json
 import urllib.request
-import pkg_resources
+from pathlib import Path
 import h5py
 import numpy as np
 from itertools import groupby
@@ -18,23 +18,30 @@ import pbdl.logging as logging
 from pbdl.logging import info, success, warn, fail, corrupt
 from pbdl.utilities import get_sel_const_sim, get_meta_data, scan_local_dset_dir, get_sel_const_sim_v2
 
-config_path = pkg_resources.resource_filename(__name__, "config.json")
+BASE_DIR = Path(__file__).parent
+config_path = BASE_DIR / "config.json"
 
 # load configuration
 try:
     with open(config_path, "r") as f:
         config = json.load(f)
+except FileNotFoundError:
+    raise FileNotFoundError(f"Configuration file not found: {config_path}")
 except json.JSONDecodeError:
-    raise ValueError("Invalid configuration file.")
+    raise ValueError(f"Invalid configuration file: {config_path}")
 
 
-def _load_index():
+def _load_index(local_index_metadata=True,global_index_fetch=True):
     global local_index
     global global_index
 
     # load local dataset index
-    local_index = scan_local_dset_dir(config)
-    global_index = pbdl.fetcher.fetch_index(config)
+    local_index = scan_local_dset_dir(config, load_metadata=local_index_metadata)
+    if global_index_fetch:
+        global_index = pbdl.fetcher.fetch_index(config)
+    else:
+        global_index = None
+    
 
 
 def index():
@@ -64,6 +71,9 @@ class Dataset:
         crop_size=None,
         seed=0,
         clear_norm_data=False,
+        crop_fn=None,
+        local_index_metadata=True,
+        global_index_fetch=True,
         **kwargs,
     ):
 
@@ -72,14 +82,14 @@ class Dataset:
         self.disable_progress = disable_progress
 
         config.update(kwargs)
-        _load_index()
+        _load_index(local_index_metadata,global_index_fetch)
 
-        if dset_name in local_index.keys():
+        if dset_name in local_index:
             dset_file = os.path.join(
                 config["local_datasets_dir"], dset_name + config["dataset_ext"]
             )
             self._load_dataset(dset_name, dset_file)
-        elif dset_name in global_index.keys():
+        elif global_index is not None and dset_name in global_index.keys():
             # self.__download_dataset__(dset_name, sel_sims)
             if global_index[dset_name]["isSingleFile"]:
                 warn(
@@ -106,8 +116,6 @@ class Dataset:
                 f"Dataset '{dset_name}' not found, datasets available are: {suggestions}."
             )
             sys.exit(0)
-
-        self.crop_size = crop_size
 
         self.set_seed(seed)
 
@@ -184,6 +192,8 @@ class Dataset:
         )
         
         self.sel_channels = sel_channels
+        self.crop_size = crop_size
+        self.crop_fn = crop_fn
 
     def set_seed(self, seed):
 
@@ -265,61 +275,61 @@ class Dataset:
         )
         target_frame_idx = input_frame_idx + self.time_steps
 
-        dim_list = self.sim_shape[2:]
+        # dim_list = self.sim_shape[2:]
 
-        if self.crop_size is None:
+        # if self.crop_size is None:
 
-            input = sim[input_frame_idx]
+        input = sim[input_frame_idx]
 
-        else:
+        # else:
 
-            crop_dim_list = [self.rng.integers(low=0, high=dim-self.crop_size, size=1)[0] for dim in dim_list]
+        #     crop_dim_list = [self.rng.integers(low=0, high=dim-self.crop_size, size=1)[0] for dim in dim_list]
         
-            # 2D
-            if len(dim_list) == 2:
-                input = sim[input_frame_idx, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
-                                                crop_dim_list[1]:crop_dim_list[1]+self.crop_size]
-            # 3D
-            elif len(dim_list) == 3:
-                input = sim[input_frame_idx, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
-                                                crop_dim_list[1]:crop_dim_list[1]+self.crop_size,
-                                                crop_dim_list[2]:crop_dim_list[2]+self.crop_size]
-            else:
-                raise ValueError(f'Dimension {self.sim_shape} not supported')
+        #     # 2D
+        #     if len(dim_list) == 2:
+        #         input = sim[input_frame_idx, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
+        #                                         crop_dim_list[1]:crop_dim_list[1]+self.crop_size]
+        #     # 3D
+        #     elif len(dim_list) == 3:
+        #         input = sim[input_frame_idx, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
+        #                                         crop_dim_list[1]:crop_dim_list[1]+self.crop_size,
+        #                                         crop_dim_list[2]:crop_dim_list[2]+self.crop_size]
+        #     else:
+        #         raise ValueError(f'Dimension {self.sim_shape} not supported')
 
         if self.intermediate_time_steps:
 
-            if self.crop_size is None:
+        #     if self.crop_size is None:
 
-                target = sim[input_frame_idx + 1: target_frame_idx + 1]
+            target = sim[input_frame_idx + 1: target_frame_idx + 1]
 
-            else:
+        #     else:
 
-                if len(dim_list) == 2:
-                    target = sim[input_frame_idx + 1: target_frame_idx + 1, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
-                                                                               crop_dim_list[1]:crop_dim_list[1]+self.crop_size]
+        #         if len(dim_list) == 2:
+        #             target = sim[input_frame_idx + 1: target_frame_idx + 1, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
+        #                                                                        crop_dim_list[1]:crop_dim_list[1]+self.crop_size]
 
-                elif len(dim_list) == 3:
-                    target = sim[input_frame_idx + 1: target_frame_idx + 1, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
-                                                                               crop_dim_list[1]:crop_dim_list[1]+self.crop_size,
-                                                                               crop_dim_list[2]:crop_dim_list[2]+self.crop_size]
+        #         elif len(dim_list) == 3:
+        #             target = sim[input_frame_idx + 1: target_frame_idx + 1, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
+        #                                                                        crop_dim_list[1]:crop_dim_list[1]+self.crop_size,
+        #                                                                        crop_dim_list[2]:crop_dim_list[2]+self.crop_size]
         
         else:
 
-            if self.crop_size is None:
+        #     if self.crop_size is None:
 
-                target = sim[input_frame_idx]
+            target = sim[input_frame_idx]
 
-            else:
+        #     else:
 
-                if len(dim_list) == 2:
-                    target = sim[input_frame_idx, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
-                                                                               crop_dim_list[1]:crop_dim_list[1]+self.crop_size]
+        #         if len(dim_list) == 2:
+        #             target = sim[input_frame_idx, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
+        #                                                                        crop_dim_list[1]:crop_dim_list[1]+self.crop_size]
 
-                elif len(dim_list) == 3:
-                    target = sim[input_frame_idx, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
-                                                                               crop_dim_list[1]:crop_dim_list[1]+self.crop_size,
-                                                                               crop_dim_list[2]:crop_dim_list[2]+self.crop_size]
+        #         elif len(dim_list) == 3:
+        #             target = sim[input_frame_idx, :, crop_dim_list[0]:crop_dim_list[0]+self.crop_size,
+        #                                                                        crop_dim_list[1]:crop_dim_list[1]+self.crop_size,
+        #                                                                        crop_dim_list[2]:crop_dim_list[2]+self.crop_size]
 
         const_nnorm = const
 
@@ -340,9 +350,48 @@ class Dataset:
         if self.sel_channels is not None:
             input = input[self.sel_channels]
             if self.intermediate_time_steps:
-                target = target[:, self.sel_channels]
+                target = target[:,self.sel_channels]
             else:
                 target = target[self.sel_channels]
+
+        # cropping 
+        if self.crop_fn is not None:
+            input, target = self.crop_fn(input, target, idx, self)
+        elif self.crop_size is not None:
+            # spatial dims = everything after channel dim
+            spatial_shape = input.shape[1:]
+            
+            # ensure crop_size is iterable
+            if isinstance(self.crop_size, int):
+                crop_size = [self.crop_size] * len(spatial_shape)
+            else:
+                crop_size = self.crop_size
+
+            assert all(
+                crop_size[d] <= spatial_shape[d]
+                for d in range(len(spatial_shape))
+            ), "Crop size larger than spatial dimension"
+
+            # sample crop start indices uniformly
+            crop_starts = [
+                np.random.randint(0, spatial_shape[d] - crop_size[d] + 1)
+                for d in range(len(spatial_shape))
+            ]
+
+            # build slicing tuple
+            slices = tuple(
+                slice(crop_starts[d], crop_starts[d] + crop_size[d])
+                for d in range(len(spatial_shape))
+            )
+
+            # apply crop to input
+            input = input[(slice(None),) + slices]
+
+            # apply crop to target
+            if self.intermediate_time_steps:
+                target = target[(slice(None), slice(None)) + slices]
+            else:
+                target = target[(slice(None),) + slices]
 
         return (
             input,

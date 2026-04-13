@@ -5,7 +5,7 @@ import urllib
 import io
 import json
 import pbdl.normalization as norm
-import pkg_resources
+from pathlib import Path
 import sys
 
 import pbdl.logging as logging
@@ -131,7 +131,8 @@ def dl_parts_from_huggingface(
 def fetch_index_from_huggingface(config):
     repo_id = config["hf_repo_id"]
     url_repo = f"https://huggingface.co/datasets/{repo_id}/resolve/main/"
-    index_path = pkg_resources.resource_filename(__name__, "global_index.json")
+    BASE_DIR = Path(__file__).parent
+    index_path = BASE_DIR / "global_index.json"
 
     try:
         files = get_hf_repo_file_list(repo_id)
