@@ -148,10 +148,12 @@ class Dataset:
             self.step_size = step_size or 1
 
             group = self.dset["sims"][f'{next(iter(self.dset["sims"]))}']
+            
             if isinstance(group, Group):
                 self.num_frames = len(group)
             else:
                 self.num_frames = group.shape[0]
+                self.data_shape = group.shape[2:]
 
             self.samples_per_sim = (
                 self.num_frames - self.time_steps - self.trim_start - self.trim_end
