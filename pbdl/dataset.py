@@ -18,6 +18,8 @@ import pbdl.logging as logging
 from pbdl.logging import info, success, warn, fail, corrupt
 from pbdl.utilities import get_sel_const_sim, get_meta_data, scan_local_dset_dir, get_sel_const_sim_v2
 
+from pbdl.loading_utilities import instantiate_from_config
+
 BASE_DIR = Path(__file__).parent
 config_path = BASE_DIR / "config.json"
 
@@ -195,7 +197,10 @@ class Dataset:
         
         self.sel_channels = sel_channels
         self.crop_size = crop_size
-        self.crop_fn = crop_fn
+        if crop_fn is not None:
+            self.crop_fn = instantiate_from_config(crop_fn)
+        else:
+            self.crop_fn = crop_fn
 
     def set_seed(self, seed):
 
